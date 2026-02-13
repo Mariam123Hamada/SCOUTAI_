@@ -1,0 +1,11 @@
+torch==2.10.0 
+torchvision==0.25.0
+opencv-python==4.8.1.78
+numpy==1.26.2
+mediapipe==0.10.32
+tqdm==4.66.1
+matplotlib==3.8.2
+pandas==2.1.4
+ultralytics==8.1.0
+mediapipe==0.10.32
+
