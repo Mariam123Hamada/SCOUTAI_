@@ -1,0 +1,8 @@
+{
+    "ratio_px2meter": 5.0,
+    "fps": 60,
+    "boundary_px": 50,
+    "turn_hysteresis_frames": 3,
+    "touch_velocity_threshold": 9.0,
+    "foot_threshold": 50
+}
