@@ -38,6 +38,6 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 python main.py
 ```
 
-To change the input video, place your video file in the Data folder.
+#### To change the input video, place your video file in the Data folder.
 
-To use a different pre-trained model for cone detection, place it in the models folder and update the model_path variable in main.py.
+#### To use a different pre-trained model for cone detection, place it in the models folder and update the model_path variable in main.py.
