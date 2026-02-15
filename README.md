@@ -11,8 +11,9 @@ ScoutAI is a computer vision-based analytics system for tracking football drills
 
 ## 🚀 Features
 * **Real-time Speed Tracking:** Measures velocity using calibrated cone distances.
-* **Body Lean Analysis:** Uses MediaPipe to detect agility angles.
-* **Touch Detection:** Detects contact between the feet and the ball.
+* **Body Lean Analysis:** Uses MediaPipe to detect agility angles and posture.
+* **Touch Detection:** Detects contact between the player’s feet and the ball.
+* **Player Heatmap Visualization:** Tracks all player positions and overlays a heatmap on a stadium image to show where the player spends most time.
 
 ## Setup Instructions
 ### Step 1: Create a Virtual Environment
