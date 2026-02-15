@@ -6,22 +6,28 @@ import os
 import json
 import mediapipe as mp
 from pipeline import ConeDetection, PlayerAnalysis, SpeedAnalysis
-from utils import draw_analytics_panel
+from helper import draw_analytics_panel
 
-
+# --- Paths ---
 BASE_DIR = os.getcwd()
 model_path = os.path.join(BASE_DIR, "models", "best.pt")
 video_path = os.path.join(BASE_DIR, "Data", "1_505.mp4")
+stadium_path = os.path.join(BASE_DIR, "assest","stadium_top_view.webp")  
 
 if not os.path.exists(video_path):
     print(f"Error: Could not find video at {video_path}")
+    
+if not os.path.exists(stadium_path):
+    print(f"Error: Could not find stadium image at {stadium_path}")
 
+stadium_img = cv2.imread(stadium_path)
+stadium_img = cv2.resize(stadium_img, (960, 640)) #(Width , height)
+stadium_h, stadium_w, _ = stadium_img.shape
 
+# --- Initialize models ---
 detector = ConeDetection(model_path)
 cap = cv2.VideoCapture(video_path)
-fps = cap.get(cv2.CAP_PROP_FPS)
-if fps == 0:
-    fps = 60
+fps = cap.get(cv2.CAP_PROP_FPS) or 60
 
 analysis = PlayerAnalysis(ratio_px2meter=5.0, fps=fps)
 speed_analyzer = SpeedAnalysis(ratio_px2meter=5.0)
@@ -33,21 +39,22 @@ pose = mp_pose.Pose(static_image_mode=False,
                     min_detection_confidence=0.5,
                     min_tracking_confidence=0.5)
 
+# --- Tracking Variables ---
 frame_count = 0
 start_time = time.time()
-
 static_cones = None
 gate_start_time = None
 gate_speeds = []
 gate_radius = 40
 previous_gate_speed = None
-
 c1_time = None
 c2_time = None
-
 turn_start_time = None
 turn_efficiencies = []
 turn_radius = 60
+
+# --- Heatmap tracking ---
+player_positions = []
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -79,7 +86,7 @@ while cap.isOpened():
             cone_positions.append((cx, cy))
             cv2.circle(frame, (cx, cy), 6, (0, 255, 0), -1)
 
-    
+
     if static_cones is None and len(cone_positions) >= 2:
         static_cones = cone_positions[:2]
         analysis.calibration(static_cones)
@@ -88,17 +95,15 @@ while cap.isOpened():
     if not analysis.m_per_pixel and len(cone_positions) >= 2:
         analysis.calibration(cone_positions[:2])
 
-    
     left_foot, right_foot = analysis.get_feet_positions(frame)
     lean_angle = analysis.get_body_lean(frame)
 
-    
     if ball_pos and left_foot and right_foot:
         touch_detected = analysis.detect_real_touch(ball_pos, left_foot, right_foot)
         if touch_detected:
             cv2.putText(frame, "BALL TOUCHED!", (400, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
 
-   
+    
     gate_speed_text = previous_gate_speed
     if static_cones and ball_pos:
         cone1, cone2 = static_cones
@@ -134,6 +139,10 @@ while cap.isOpened():
 
     current_turn_eff = turn_efficiencies[-1] if turn_efficiencies else None
 
+    #Collect player positions for heatmap
+    if ball_pos:
+        player_positions.append(ball_pos)
+
     
     frame = draw_analytics_panel(frame, lean_angle, analysis.touch_count,
                                  gate_speed_text, current_turn_eff)
@@ -142,11 +151,12 @@ while cap.isOpened():
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
-# --- Final Report ---
+
 end_time = time.time()
 cap.release()
 cv2.destroyAllWindows()
 
+# --- Final Report ---
 drill_duration = frame_count / fps
 peak_gate_speed = max(gate_speeds) if gate_speeds else 0
 avg_gate_speed = np.mean(gate_speeds) if gate_speeds else 0
@@ -166,7 +176,26 @@ scout_report = {
     "Measured Drill Time": f"{end_time - start_time:.2f}s"
 }
 
-with open("scout_report.json", "w") as f:
+with open("output\scout_report.json", "w") as f:
     json.dump(scout_report, f, indent=4)
 
 print("\n[INFO] Scout report saved to scout_report.json")
+
+
+heatmap = np.zeros((stadium_h, stadium_w), dtype=np.float32)
+for x, y in player_positions:
+    
+    sx = int(x / frame.shape[1] * stadium_w)
+    sy = int(y / frame.shape[0] * stadium_h)
+    if 0 <= sy < stadium_h and 0 <= sx < stadium_w:
+        heatmap[sy, sx] += 1
+
+heatmap = cv2.GaussianBlur(heatmap, (31, 31), 0)
+heatmap_norm = cv2.normalize(heatmap, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+heatmap_color = cv2.applyColorMap(heatmap_norm, cv2.COLORMAP_JET)
+
+stadium_overlay = cv2.addWeighted(stadium_img, 0.6, heatmap_color, 0.4, 0)
+cv2.imshow("Player Heatmap on Stadium", stadium_overlay)
+cv2.imwrite("output\player_stadium_heatmap.png", stadium_overlay)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
