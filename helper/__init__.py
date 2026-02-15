@@ -1,1 +1,1 @@
-from .utils import draw_analytics_panel
+from .utils import draw_analytics_panel , draw_player_heatmap

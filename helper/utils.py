@@ -10,7 +10,7 @@ def draw_analytics_panel(frame, lean_angle, touches, gate_speed=None, turn_effic
 
     # Panel position and size
     panel_x1, panel_y1 = 10, 10
-    panel_width, panel_height = 200, 120
+    panel_width, panel_height = 220, 120
     panel_x2 = panel_x1 + panel_width
     panel_y2 = panel_y1 + panel_height
 
@@ -43,3 +43,55 @@ def draw_analytics_panel(frame, lean_angle, touches, gate_speed=None, turn_effic
     cv2.putText(frame, f"Turn Efficiency: {turn_efficiency:.2f} s", (x_text, y_text), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 0, 255), font_thick)
 
     return frame
+
+
+
+
+def draw_player_heatmap(player_positions, stadium_path, output_size=(960, 640) , blur_size=(31, 31), alpha=0.6):
+    """
+    Draws a heatmap of player positions on a stadium image.
+
+    Args:
+        
+        player_positions (list of tuples): List of (x, y) positions of the player on the video frame.
+        stadium_path : The Staduim image Path.
+        output_size : the output image Size.
+        blur_size (tuple): Kernel size for Gaussian blur.
+        alpha (float): Transparency of stadium image overlay.
+
+    Returns:
+        heatmap_overlay (np.array): Stadium image with heatmap overlay.
+    """
+    stadium_img = cv2.imread(stadium_path)
+    if stadium_img is None:
+        raise FileNotFoundError(f"Could not load stadium image from {stadium_path}")
+
+    # Resize stadium
+    stadium_img = cv2.resize(stadium_img, output_size)
+    stadium_h, stadium_w, _ = stadium_img.shape
+   
+    
+
+   
+    heatmap = np.zeros((stadium_h, stadium_w), dtype=np.float32)
+
+    
+    for x, y in player_positions:
+       
+        sx = int(x / stadium_w * stadium_w)
+        sy = int(y / stadium_h * stadium_h)
+        if 0 <= sx < stadium_w and 0 <= sy < stadium_h:
+            heatmap[sy, sx] += 1
+
+   
+    heatmap = cv2.GaussianBlur(heatmap, blur_size, 0)
+
+    
+    heatmap_norm = cv2.normalize(heatmap, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+
+    
+    heatmap_color = cv2.applyColorMap(heatmap_norm, cv2.COLORMAP_JET)
+
+    heatmap_overlay = cv2.addWeighted(stadium_img, alpha, heatmap_color, 1 - alpha, 0)
+
+    return heatmap_overlay

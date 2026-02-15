@@ -6,9 +6,9 @@ import os
 import json
 import mediapipe as mp
 from pipeline import ConeDetection, PlayerAnalysis, SpeedAnalysis
-from helper import draw_analytics_panel
+from helper import draw_analytics_panel , draw_player_heatmap
 
-# --- Paths ---
+
 BASE_DIR = os.getcwd()
 model_path = os.path.join(BASE_DIR, "models", "best.pt")
 video_path = os.path.join(BASE_DIR, "Data", "1_505.mp4")
@@ -19,10 +19,6 @@ if not os.path.exists(video_path):
     
 if not os.path.exists(stadium_path):
     print(f"Error: Could not find stadium image at {stadium_path}")
-
-stadium_img = cv2.imread(stadium_path)
-stadium_img = cv2.resize(stadium_img, (960, 640)) #(Width , height)
-stadium_h, stadium_w, _ = stadium_img.shape
 
 # --- Initialize models ---
 detector = ConeDetection(model_path)
@@ -181,20 +177,7 @@ with open("output\scout_report.json", "w") as f:
 
 print("\n[INFO] Scout report saved to scout_report.json")
 
-
-heatmap = np.zeros((stadium_h, stadium_w), dtype=np.float32)
-for x, y in player_positions:
-    
-    sx = int(x / frame.shape[1] * stadium_w)
-    sy = int(y / frame.shape[0] * stadium_h)
-    if 0 <= sy < stadium_h and 0 <= sx < stadium_w:
-        heatmap[sy, sx] += 1
-
-heatmap = cv2.GaussianBlur(heatmap, (31, 31), 0)
-heatmap_norm = cv2.normalize(heatmap, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-heatmap_color = cv2.applyColorMap(heatmap_norm, cv2.COLORMAP_JET)
-
-stadium_overlay = cv2.addWeighted(stadium_img, 0.6, heatmap_color, 0.4, 0)
+stadium_overlay=draw_player_heatmap(player_positions, stadium_path, output_size=(960, 640) , blur_size=(31, 31), alpha=0.6)
 cv2.imshow("Player Heatmap on Stadium", stadium_overlay)
 cv2.imwrite("output\player_stadium_heatmap.png", stadium_overlay)
 cv2.waitKey(0)
