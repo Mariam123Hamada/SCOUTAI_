@@ -1,9 +1,8 @@
 import cv2
 import numpy as np
 
-def draw_analytics_panel(frame, current_speed, lean_angle, touches, gate_speed=None, turn_efficiency=None):
+def draw_analytics_panel(frame, lean_angle, touches, gate_speed=None, turn_efficiency=None):
     # Ensure all values are numbers
-    current_speed = 0.0 if current_speed is None else current_speed
     lean_angle = 0.0 if lean_angle is None else lean_angle
     touches = 0 if touches is None else touches
     gate_speed = 0.0 if gate_speed is None else gate_speed
@@ -11,7 +10,7 @@ def draw_analytics_panel(frame, current_speed, lean_angle, touches, gate_speed=N
 
     # Panel position and size
     panel_x1, panel_y1 = 10, 10
-    panel_width, panel_height = 220, 140
+    panel_width, panel_height = 200, 120
     panel_x2 = panel_x1 + panel_width
     panel_y2 = panel_y1 + panel_height
 
@@ -34,9 +33,7 @@ def draw_analytics_panel(frame, current_speed, lean_angle, touches, gate_speed=N
     # Body lean color
     lean_color = (0, 255, 255) if lean_angle > 15 else (0, 255, 0)
 
-    # Draw all metrics
-    cv2.putText(frame, f"Speed: {current_speed:.2f} m/s", (x_text, y_text), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), font_thick)
-    y_text += line_gap
+    # Draw all metrics (without speed)
     cv2.putText(frame, f"Lean: {lean_angle:.1f} deg", (x_text, y_text), cv2.FONT_HERSHEY_SIMPLEX, font_scale, lean_color, font_thick)
     y_text += line_gap
     cv2.putText(frame, f"Touches: {touches}", (x_text, y_text), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 255, 0), font_thick)

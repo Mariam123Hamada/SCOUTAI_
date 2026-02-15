@@ -46,7 +46,7 @@ class SpeedAnalysis:
         if time_diff <= 0:
             return None
 
-        # 4️ Calculate speed
+        # Calculate speed
         speed_mps = distance_meters / time_diff
         speed_kmph = speed_mps * 3.6
 
