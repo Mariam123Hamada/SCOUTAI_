@@ -1,39 +1,38 @@
-from pipeline import ConeDetection, PlayerAnalysis
-from utils import draw_analytics_panel
 import cv2
-import math
-import time
 import numpy as np
-import json
+import time
+import math
 import os
+import json
 import mediapipe as mp
+from pipeline import ConeDetection, PlayerAnalysis, SpeedAnalysis
+from utils import draw_analytics_panel
 
-
-BASE_DIR = os.getcwd() 
-
+# --- Setup paths ---
+BASE_DIR = os.getcwd()
 model_path = os.path.join(BASE_DIR, "models", "best.pt")
 video_path = os.path.join(BASE_DIR, "Data", "1_505.mp4")
 
 if not os.path.exists(video_path):
     print(f"Error: Could not find video at {video_path}")
 
+# --- Initialize models ---
 detector = ConeDetection(model_path)
 cap = cv2.VideoCapture(video_path)
-
 fps = cap.get(cv2.CAP_PROP_FPS)
 if fps == 0:
     fps = 60
 
 analysis = PlayerAnalysis(ratio_px2meter=5.0, fps=fps)
+speed_analyzer = SpeedAnalysis(ratio_px2meter=5.0)  # <-- new SpeedAnalysis instance
 
 mp_pose = mp.solutions.pose
 mp_drawing = mp.solutions.drawing_utils
-pose = mp_pose.Pose(
-    static_image_mode=False,
-    model_complexity=1,
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5
-)
+pose = mp_pose.Pose(static_image_mode=False,
+                    model_complexity=1,
+                    min_detection_confidence=0.5,
+                    min_tracking_confidence=0.5)
+
 # --- Tracking Variables ---
 frame_count = 0
 start_time = time.time()
@@ -42,13 +41,15 @@ speeds = []
 static_cones = None
 gate_start_time = None
 gate_speeds = []
-gate_radius = 40  
+gate_radius = 40
 
 turn_start_time = None
 turn_efficiencies = []
-turn_radius = 60  
-previous_gate_speeed=None
+turn_radius = 60
+previous_gate_speed = None
 
+c1_time = None
+c2_time = None
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -59,17 +60,16 @@ while cap.isOpened():
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     pose_results = pose.process(rgb_frame)
 
-    
     if pose_results.pose_landmarks:
         mp_drawing.draw_landmarks(
-            frame, 
-            pose_results.pose_landmarks, 
+            frame,
+            pose_results.pose_landmarks,
             mp_pose.POSE_CONNECTIONS,
             mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=1, circle_radius=1),
             mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=1)
         )
-    detections = detector.get_detections_with_colors(frame)
 
+    detections = detector.get_detections_with_colors(frame)
     ball_pos = None
     cone_positions = []
 
@@ -90,28 +90,21 @@ while cap.isOpened():
     if not analysis.m_per_pixel and len(cone_positions) >= 2:
         analysis.calibration(cone_positions[:2])
 
-    # --- Closest turn cone ---
-    turn_cone = (
-        min(cone_positions, key=lambda c: math.dist(c, ball_pos))
-        if ball_pos and cone_positions else None
-    )
-
     # --- Track Analytics ---
+    turn_cone = min(cone_positions, key=lambda c: math.dist(c, ball_pos)) if ball_pos and cone_positions else None
     current_speed, turn_time, _ = analysis.track_analytics(ball_pos, turn_cone_pos=turn_cone)
     speeds.append(current_speed)
 
-    # --- Feet & Lean ---
     left_foot, right_foot = analysis.get_feet_positions(frame)
     lean_angle = analysis.get_body_lean(frame)
 
-    # --- Detect Ball Touch ---
     if ball_pos and left_foot and right_foot:
         touch_detected = analysis.detect_real_touch(ball_pos, left_foot, right_foot)
         if touch_detected:
             cv2.putText(frame, "BALL TOUCHED!", (400, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
 
-    # --- Gate Speed ---
-    gate_speed_text = previous_gate_speeed
+    # --- Gate Speed with SpeedAnalysis ---
+    gate_speed_text = previous_gate_speed
     if static_cones and ball_pos:
         cone1, cone2 = static_cones
         cv2.circle(frame, cone1, gate_radius, (255, 255, 255), 2)
@@ -120,20 +113,21 @@ while cap.isOpened():
         dist_to_c1 = math.dist(ball_pos, cone1)
         dist_to_c2 = math.dist(ball_pos, cone2)
 
-        if dist_to_c1 < gate_radius and gate_start_time is None:
-            gate_start_time = time.time()
-        if dist_to_c2 < gate_radius and gate_start_time is not None:
-            elapsed = time.time() - gate_start_time
-            if elapsed > 0 and analysis.m_per_pixel:
-                real_distance = analysis.dist_between_cones
-                speed_ms = real_distance / elapsed
-                
-                gate_speeds.append(speed_ms)
-                gate_speed_text = speed_ms
-            gate_start_time = None
-            previous_gate_speeed = gate_speed_text
+        if dist_to_c1 < gate_radius and c1_time is None:
+            c1_time = time.time()
+        if dist_to_c2 < gate_radius and c1_time is not None:
+            c2_time = time.time()
+            # --- Use SpeedAnalysis ---
+            speed_result = speed_analyzer.detect_speed(frame, cone1, cone2, c1_time, c2_time)
+            if speed_result:
+                speed_mps, speed_kmph = speed_result
+                gate_speeds.append(speed_mps)
+                gate_speed_text = speed_mps
+                print(f"[INFO] Gate Speed: {speed_mps:.2f} m/s ({speed_kmph:.2f} km/h)")
+            c1_time, c2_time = None, None
+            previous_gate_speed = gate_speed_text
 
-    # --- Turn Efficiency ---
+
     if turn_cone and ball_pos:
         dist_to_turn_cone = math.dist(ball_pos, turn_cone)
         if dist_to_turn_cone < turn_radius and turn_start_time is None:
@@ -145,15 +139,14 @@ while cap.isOpened():
             turn_start_time = None
     current_turn_eff = turn_efficiencies[-1] if turn_efficiencies else None
 
-    
     frame = draw_analytics_panel(frame, current_speed, lean_angle, analysis.touch_count,
-                                  gate_speed_text, current_turn_eff)
+                                 gate_speed_text, current_turn_eff)
 
     cv2.imshow("ScoutAI Pro Analytics", frame)
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
-
+# --- Final Report ---
 end_time = time.time()
 cap.release()
 cv2.destroyAllWindows()
